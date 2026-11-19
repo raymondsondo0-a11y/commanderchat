@@ -44,6 +44,11 @@ begin
   insert into public.conversation_members(conversation_id,user_id) values(new_id,current_user_id),(new_id,target_user);
   return new_id;
 end; $$;
+create or replace function public.is_conversation_member(target_conversation uuid)
+returns boolean language sql stable security definer set search_path=public as $
+  select exists(select 1 from public.conversation_members where conversation_id=target_conversation and user_id=auth.uid());
+$;
+grant execute on function public.is_conversation_member(uuid) to authenticated;
 alter table public.profiles enable row level security;
 alter table public.conversations enable row level security;
 alter table public.conversation_members enable row level security;
@@ -51,11 +56,11 @@ alter table public.messages enable row level security;
 create policy "Profiles are visible to authenticated users" on public.profiles for select to authenticated using(true);
 create policy "Users can create own profile" on public.profiles for insert to authenticated with check(id=auth.uid());
 create policy "Users can update own profile" on public.profiles for update to authenticated using(id=auth.uid()) with check(id=auth.uid());
-create policy "Members can view conversations" on public.conversations for select to authenticated using(exists(select 1 from public.conversation_members m where m.conversation_id=id and m.user_id=auth.uid()));
-create policy "Members can view membership" on public.conversation_members for select to authenticated using(exists(select 1 from public.conversation_members m where m.conversation_id=conversation_id and m.user_id=auth.uid()));
-create policy "Members can view messages" on public.messages for select to authenticated using(exists(select 1 from public.conversation_members m where m.conversation_id=messages.conversation_id and m.user_id=auth.uid()));
-create policy "Members can send messages" on public.messages for insert to authenticated with check(sender_id=auth.uid() and exists(select 1 from public.conversation_members m where m.conversation_id=messages.conversation_id and m.user_id=auth.uid()));
-create policy "Recipients can mark messages read" on public.messages for update to authenticated using(exists(select 1 from public.conversation_members m where m.conversation_id=messages.conversation_id and m.user_id=auth.uid()) and sender_id<>auth.uid()) with check(exists(select 1 from public.conversation_members m where m.conversation_id=messages.conversation_id and m.user_id=auth.uid()));
+create policy "Members can view conversations" on public.conversations for select to authenticated using(public.is_conversation_member(id));
+create policy "Members can view membership" on public.conversation_members for select to authenticated using(public.is_conversation_member(conversation_id));
+create policy "Members can view messages" on public.messages for select to authenticated using(public.is_conversation_member(conversation_id));
+create policy "Members can send messages" on public.messages for insert to authenticated with check(sender_id=auth.uid() and public.is_conversation_member(conversation_id));
+create policy "Recipients can mark messages read" on public.messages for update to authenticated using(exists(select 1 from public.conversation_members m where m.conversation_id=messages.conversation_id and m.user_id=auth.uid()) and sender_id<>auth.uid()) with check(public.is_conversation_member(conversation_id));
 grant execute on function public.create_direct_conversation(uuid) to authenticated;
 grant select,insert,update on public.profiles to authenticated;
 grant select on public.conversations,public.conversation_members to authenticated;
