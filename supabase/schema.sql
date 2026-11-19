@@ -45,9 +45,12 @@ begin
   return new_id;
 end; $$;
 create or replace function public.is_conversation_member(target_conversation uuid)
-returns boolean language sql stable security definer set search_path=public as $
-  select exists(select 1 from public.conversation_members where conversation_id=target_conversation and user_id=auth.uid());
-$;
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as 'select exists (select 1 from public.conversation_members where conversation_id = target_conversation and user_id = auth.uid())';
 grant execute on function public.is_conversation_member(uuid) to authenticated;
 alter table public.profiles enable row level security;
 alter table public.conversations enable row level security;
